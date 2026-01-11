@@ -71,13 +71,13 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Create Postgres user with test permissions
+### Create Postgres user with test permissions
 psql -U postgres -c "CREATE USER lamar_user WITH PASSWORD 'lamar_password' CREATEDB;"
 
-# Create initial DB
+### Create initial DB
 psql -U postgres -c "CREATE DATABASE lamar_db OWNER lamar_user;"
 
-# Run migrations & testing
+### Run migrations & testing
 python manage.py migrate
 python manage.py test  # Crucial: Verify integrity rules before use
 python manage.py runserver
