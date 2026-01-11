@@ -1,0 +1,5 @@
+Django==5.2.10
+dj-database-url==2.2.0
+openai==1.61.0
+psycopg[binary]==3.2.5
+python-dotenv==1.0.1

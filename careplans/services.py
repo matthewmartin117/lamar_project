@@ -14,7 +14,6 @@ def generate_care_plan_from_llm(patient_records_text: str, medication_name: str)
     if not api_key:
         return None, "API Key missing. Please check system configuration."
 
-    client = OpenAI(api_key=api_key)
     system_prompt = (
         "You are a Senior Clinical Pharmacist at a specialty pharmacy. "
         "Your task is to transform unstructured clinical notes into a structured Pharmacist Care Plan. "
@@ -46,6 +45,7 @@ def generate_care_plan_from_llm(patient_records_text: str, medication_name: str)
     """
 
     try:
+        client = OpenAI(api_key=api_key)
         response = client.responses.create(
             model="gpt-4o",
             input=[

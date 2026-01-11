@@ -164,6 +164,8 @@ class OrderIntakeForm(forms.Form):
             reasons.append("Possible duplicate order (same patient + medication on a different date).")
         if cd.get("__provider_npi_conflict"):
             reasons.append("Provider name matches existing provider but NPI differs.")
+        if provider_name_mismatch:
+            reasons.append("Provider NPI matches existing record but has a different provider name.")
         if patient_name_mismatch:
             reasons.append("Patient MRN exists but name differs.")
         return " | ".join(reasons)
