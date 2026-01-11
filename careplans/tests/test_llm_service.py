@@ -7,9 +7,7 @@ class TestLLMIntegration(TestCase):
 
     @patch('careplans.services.OpenAI')
     def test_llm_success(self, mock_llm):
-        mock_llm.return_value = type("obj", {
-            "choices": [type("obj", {"message": type("obj", {"content": "CARE PLAN"})})]
-        })
+        mock_llm.return_value.responses.create.return_value.output_text = "CARE PLAN"
 
         text, error = generate_care_plan_from_llm("clinical text", "IVIG")
 
