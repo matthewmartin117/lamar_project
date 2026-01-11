@@ -1,7 +1,6 @@
 import os
 from openai import OpenAI
-
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+from django.conf import settings
 
 def generate_care_plan_from_llm(patient_records_text: str, medication_name: str):
     """
@@ -10,6 +9,12 @@ def generate_care_plan_from_llm(patient_records_text: str, medication_name: str)
     Returns:
         (care_plan_text, error_message)
     """
+    # Initialize INSIDE the function so it doesn't crash on startup
+    api_key = getattr(settings, "OPENAI_API_KEY", None)
+    if not api_key:
+        return None, "API Key missing. Please check system configuration."
+
+    client = OpenAI(api_key=api_key)
     system_prompt = (
         "You are a Senior Clinical Pharmacist at a specialty pharmacy. "
         "Your task is to transform unstructured clinical notes into a structured Pharmacist Care Plan. "
@@ -47,9 +52,13 @@ def generate_care_plan_from_llm(patient_records_text: str, medication_name: str)
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            # protect against token overflow
             max_output_tokens=800,
+            # for determinstic output
             temperature=0.2,
+            # make sure the model returns text and not JSON
             response_format={"type": "text"},
+            # makes sure repsonse is not lagging
             timeout=20,
         )
 

@@ -74,16 +74,15 @@ WSGI_APPLICATION = "lamar_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+import os
+import dj_database_url
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "lamar_db",
-        "USER": "lamar_user",
-        "PASSWORD": "lamar_password",
-        "HOST": "localhost",
-        "PORT": "5432",
-    }
+    "default": dj_database_url.config(
+        default=os.environ.get("DATABASE_URL")
+    )
 }
+
 
 
 # Password validation
@@ -129,3 +128,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+import sys
+if 'test' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': 'test_db.sqlite3',
+    }

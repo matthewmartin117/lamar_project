@@ -15,12 +15,13 @@ class OrderIntakeForm(forms.Form):
     patient_first_name = forms.CharField(max_length=100)
     patient_last_name = forms.CharField(max_length=100)
     patient_mrn = forms.CharField(max_length=6)
-    patient_dob = forms.DateField()
+    patient_dob = forms.DateField(required=False)
 
     # Order
     medication_name = forms.CharField(max_length=200)
     order_date = forms.DateField()
     primary_diagnosis_icd10 = forms.CharField(max_length=10)
+
     additional_diagnoses = forms.CharField(
         required=False,
         help_text="Comma-separated ICD-10 codes"
@@ -29,7 +30,12 @@ class OrderIntakeForm(forms.Form):
         required=False,
         help_text="Comma-separated medication strings"
     )
+
     patient_records_text = forms.CharField(widget=forms.Textarea)
+
+    # ---------------------
+    # Field-level validation
+    # ---------------------
 
     def clean_provider_npi(self):
         npi = self.cleaned_data["provider_npi"].strip()
@@ -45,46 +51,46 @@ class OrderIntakeForm(forms.Form):
 
     def clean_order_date(self):
         d = self.cleaned_data["order_date"]
-        # Optional: prevent future dates if you want (ask if needed)
         if d > timezone.localdate():
             raise ValidationError("Order date cannot be in the future.")
         return d
 
+    # ---------------------
+    # Cross-field validation
+    # ---------------------
     def clean(self):
-        """
-        Cross-field validation.
-        This runs AFTER individual clean_<field>() methods.
-        """
         cleaned = super().clean()
         if self.errors:
-            return cleaned  # stop early if basic fields invalid
+            return cleaned
 
         mrn = cleaned["patient_mrn"]
-        order_date = cleaned["order_date"]
-        med = cleaned["medication_name"].strip().lower()
+        med = cleaned["medication_name"].strip()
+        date = cleaned["order_date"]
 
-        # Duplicate order detection (hard-block)
-        # Needs patient existence; but we can check by MRN since MRN is unique identifier.
-        existing_orders = Order.objects.filter(
+        # HARD duplicate — block
+        existing = Order.objects.filter(
             patient__mrn=mrn,
-            order_date=order_date,
-            medication_name__iexact=cleaned["medication_name"].strip(),
+            medication_name__iexact=med,
+            order_date=date,
         )
-        if existing_orders.exists():
-            raise ValidationError("Duplicate order: same patient MRN, same medication, same date.")
+        if existing.exists():
+            raise ValidationError(
+                "Duplicate order: same patient MRN, same medication, same date."
+            )
 
-        # Potential duplicate (allow + flag)
-        possible_dup = Order.objects.filter(
+        # SOFT duplicate — allow with flag
+        soft = Order.objects.filter(
             patient__mrn=mrn,
-            medication_name__iexact=cleaned["medication_name"].strip(),
-        ).exclude(order_date=order_date)
-        cleaned["__possible_duplicate_order"] = possible_dup.exists()
+            medication_name__iexact=med,
+        ).exclude(order_date=date)
+        cleaned["__possible_duplicate_order"] = soft.exists()
 
-        # Provider NPI conflict logic (allow + flag)
-        # If provider exists by name but NPI differs, allow but flag.
+        # Provider conflicts
         name = cleaned["provider_name"].strip()
         npi = cleaned["provider_npi"]
         provider_by_name = Provider.objects.filter(name__iexact=name).first()
+
+        # Only flag when **same name but different NPI**
         if provider_by_name and provider_by_name.npi != npi:
             cleaned["__provider_npi_conflict"] = True
         else:
@@ -92,37 +98,45 @@ class OrderIntakeForm(forms.Form):
 
         return cleaned
 
+    # ---------------------
+    # Save() Implementation
+    # ---------------------
     def save(self):
-        """
-        Create Provider, Patient, and Order safely.
-        Use a transaction so we never partially write.
-        """
         if not self.is_valid():
             raise ValueError("Cannot save invalid form")
 
         cd = self.cleaned_data
 
+        # Convert comma-separated → list for JSONField
+        addl_dx = [d.strip() for d in cd["additional_diagnoses"].split(",") if d.strip()]
+        med_hist = [m.strip() for m in cd["medication_history"].split(",") if m.strip()]
+
         with transaction.atomic():
-            provider, provider_created = Provider.objects.get_or_create(
+
+            # Provider creation
+            provider, _ = Provider.objects.get_or_create(
                 npi=cd["provider_npi"],
                 defaults={"name": cd["provider_name"].strip()},
             )
 
-            # If same NPI but different name, allow + flag via order notes
-            provider_name_mismatch = (provider.name.lower() != cd["provider_name"].strip().lower())
+            provider_name_mismatch = False
+            # Name mismatch only matters if NPI matched an existing provider
+            if provider.name.lower() != cd["provider_name"].strip().lower():
+                provider_name_mismatch = True
 
-            patient, patient_created = Patient.objects.get_or_create(
+            # Patient creation
+            patient, _ = Patient.objects.get_or_create(
                 mrn=cd["patient_mrn"],
                 defaults={
                     "first_name": cd["patient_first_name"].strip(),
                     "last_name": cd["patient_last_name"].strip(),
+                    "date_of_birth": cd.get("patient_dob"),
                 },
             )
 
-            # If MRN exists but names differ, allow + flag (do not block)
             patient_name_mismatch = (
-                patient.first_name.lower() != cd["patient_first_name"].strip().lower()
-                or patient.last_name.lower() != cd["patient_last_name"].strip().lower()
+                patient.first_name.lower() != cd["patient_first_name"].strip().lower() or
+                patient.last_name.lower() != cd["patient_last_name"].strip().lower()
             )
 
             order = Order.objects.create(
@@ -131,10 +145,10 @@ class OrderIntakeForm(forms.Form):
                 medication_name=cd["medication_name"].strip(),
                 order_date=cd["order_date"],
                 primary_diagnosis_icd10=cd["primary_diagnosis_icd10"].strip(),
-                additional_diagnoses=cd["additional_diagnoses"],
-                medication_history=cd["medication_history"],
+                additional_diagnoses=addl_dx,
+                medication_history=med_hist,
                 patient_records_text=cd["patient_records_text"],
-                is_possible_duplicate_order=bool(cd.get("__possible_duplicate_order", False)),
+                is_possible_duplicate_order=cd.get("__possible_duplicate_order", False),
                 duplicate_reason=self._build_reason(
                     cd,
                     provider_name_mismatch,
@@ -144,14 +158,12 @@ class OrderIntakeForm(forms.Form):
 
         return order
 
-    def _build_reason(self, cd, provider_name_mismatch, patient_name_mismatch) -> str:
+    def _build_reason(self, cd, provider_name_mismatch, patient_name_mismatch):
         reasons = []
         if cd.get("__possible_duplicate_order"):
-            reasons.append("Possible duplicate: same patient + med exists on different date.")
+            reasons.append("Possible duplicate order (same patient + medication on a different date).")
         if cd.get("__provider_npi_conflict"):
-            reasons.append("Provider name exists with different NPI (flagged per spec).")
-        if provider_name_mismatch:
-            reasons.append("Same NPI entered with different provider name.")
+            reasons.append("Provider name matches existing provider but NPI differs.")
         if patient_name_mismatch:
-            reasons.append("Same MRN entered with different patient name.")
+            reasons.append("Patient MRN exists but name differs.")
         return " | ".join(reasons)
