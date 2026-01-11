@@ -22,3 +22,4 @@ class TestLLMIntegration(TestCase):
 
         self.assertIsNone(text)
         self.assertIn("failed", error.lower())
+
