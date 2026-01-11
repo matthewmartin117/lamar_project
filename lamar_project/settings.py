@@ -128,10 +128,3 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-import sys
-if 'test' in sys.argv:
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': 'test_db.sqlite3',
-    }
