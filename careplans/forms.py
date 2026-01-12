@@ -8,19 +8,19 @@ from .models import Provider, Patient, Order
 
 class OrderIntakeForm(forms.Form):
     # Provider
-    provider_name = forms.CharField(max_length=200)
-    provider_npi = forms.CharField(max_length=10)
+    provider_name = forms.CharField(max_length=200, label="Provider Name")
+    provider_npi = forms.CharField(max_length=10, label="Provider NPI")
 
     # Patient
-    patient_first_name = forms.CharField(max_length=100)
-    patient_last_name = forms.CharField(max_length=100)
-    patient_mrn = forms.CharField(max_length=6)
-    patient_dob = forms.DateField(required=False)
+    patient_first_name = forms.CharField(max_length=100, label="Patient First Name")
+    patient_last_name = forms.CharField(max_length=100, label="Patient Last Name")
+    patient_mrn = forms.CharField(max_length=6, label="Patient MRN")
+    patient_dob = forms.DateField(required=False, label="Patient DOB")
 
     # Order
-    medication_name = forms.CharField(max_length=200)
-    order_date = forms.DateField()
-    primary_diagnosis_icd10 = forms.CharField(max_length=10)
+    medication_name = forms.CharField(max_length=200, label="Medication Name")
+    order_date = forms.DateField(label="Order Date")
+    primary_diagnosis_icd10 = forms.CharField(max_length=10, label="Primary Diagnosis (ICD-10)")
 
     additional_diagnoses = forms.CharField(
         required=False,
@@ -32,6 +32,19 @@ class OrderIntakeForm(forms.Form):
     )
 
     patient_records_text = forms.CharField(widget=forms.Textarea)
+
+    # prevents PHI leaks
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for field in self.fields.values():
+            # Prevent autofill, but allow paste
+            field.widget.attrs['autocomplete'] = 'new-password'
+            field.widget.attrs['autocapitalize'] = 'none'
+            field.widget.attrs['autocorrect'] = 'off'
+            field.widget.attrs['spellcheck'] = 'false'
+
+
 
     # ---------------------
     # Field-level validation

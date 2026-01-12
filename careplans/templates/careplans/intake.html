@@ -1,6 +1,98 @@
-<h2>Specialty Pharmacy Intake</h2>
-<form method="post">
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patient Intake</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    .container-tight { max-width: 900px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body class="bg-light">
+
+<div class="container container-tight py-4">
+  <h1 class="mb-4">Patient Intake Form</h1>
+
+  {% if integrity_error %}
+    <div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4">
+      <h5 class="mb-2">Clinical Integrity Error</h5>
+      <ul class="mb-0">
+        {% for e in integrity_error %}
+          <li><strong>{{ e }}</strong></li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if integrity_warning %}
+    <div class="alert alert-warning border-start border-4 border-warning shadow-sm mb-4">
+      <strong>Warning:</strong> {{ integrity_warning }}
+    </div>
+  {% endif %}
+
+  {% if llm_error %}
+    <div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4">
+      <strong>LLM Error:</strong> {{ llm_error }}
+    </div>
+  {% endif %}
+
+  {% if plan_text %}
+    <div class="card mb-4 shadow">
+      <div class="card-header bg-primary text-white">Generated Care Plan</div>
+      <div class="card-body">
+        <pre class="mb-0">{{ plan_text }}</pre>
+      </div>
+    </div>
+  {% endif %}
+
+  <form
+    id="intake-form"
+    method="post"
+    class="card p-4 shadow-sm"
+    autocomplete="off"
+    autocapitalize="off"
+    autocorrect="off"
+    spellcheck="false"
+  >
     {% csrf_token %}
+
+    <!-- Chrome autofill mitigation: hidden “fake” creds fields -->
+    <!-- This reduces the chance Chrome tries to reuse prior values for your real inputs -->
+    <input type="text" name="fakeusernameremembered" style="display:none" autocomplete="username">
+    <input type="password" name="fakepasswordremembered" style="display:none" autocomplete="new-password">
+
     {{ form.as_p }}
-    <button type="submit">Validate & Process Care Plan</button>
-</form>
+
+    <button type="submit" class="btn btn-primary btn-lg w-100 mt-3">
+      Submit
+    </button>
+  </form>
+</div>
+
+<script>
+  // Kill bfcache repopulation (back/forward/refresh restore)
+  window.addEventListener("pageshow", function (event) {
+    const form = document.getElementById("intake-form");
+    if (!form) return;
+
+    // If loaded from bfcache OR navigating back/forward, reset fields
+    if (event.persisted) {
+      form.reset();
+    } else {
+      // Some Chrome cases don’t set event.persisted; detect navigation type
+      const nav = performance.getEntriesByType("navigation");
+      if (nav && nav.length && (nav[0].type === "back_forward")) {
+        form.reset();
+      }
+    }
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -22,7 +22,7 @@ In this build, I prioritized **backend robustness** over frontend aesthetics to 
 ## 3. System Architecture
 The project follows a modular Django MVT (Model-View-Template) structure to ensure the code is navigable by any engineer in minutes.
 
-```
+```text
 careplans/
 ├── models.py          # Strict schema with Database Constraints
 ├── forms.py           # Multi-entity validation (The "Security Guard")
@@ -38,7 +38,7 @@ This system implements a "Defense in Depth" strategy where validation is redunda
 
 ### Hard-Blocks (Deterministic Rejection)
 * **Duplicate Therapy Prevention:** The system physically rejects any submission where the (Patient MRN + Medication Name + Order Date) matches an existing record.
-* **Structural Integrity:** Regex validators enforce that NPIs are exactly 10 digits and MRNs are 6-8 digits before the database is even queried.
+* **Structural Integrity:** Regex validators enforce that NPIs are exactly 10 digits and MRNs are 6 digits before the database is even queried.
 * **Temporal Logic:** The `clean_order_date` method ensures backlogged data is a valid past date and prevents future-dated "impossible" orders.
 
 ### Soft-Warnings (Flagged & Persisted)
@@ -55,34 +55,78 @@ The Care Plan generation is designed as an isolated **Service Layer** to maintai
 * **Deterministic Configuration:** Configured with a `temperature` of 0.2 to ensure output consistency and clinical reliability.
 * **Graceful Failure:** The LLM call is wrapped in a `try/except` block with a 15-second timeout. If the AI fails, the `Order` remains safely saved, and the user is notified to generate the plan manually.
 
+
 ---
 
 ## 6. Setup & Deployment
-### Environment Configuration
-The system uses environment variables to prevent sensitive keys from being committed to version control. Create a `.env` file in the project root:
 
-OPENAI_API_KEY= `your_sk_key_here`
-DEBUG=`True`
-DATABASE_URL=``postgres://..`
+### Prerequisites
+- Python 3.11+
+- Postgres (recommended for running the app locally)
+- Tests run out of the box without Postgres (SQLite in-memory during `manage.py test`)
 
+---
 
-### Installation
+### 6.1 Create and activate a virtual environment
+
+```bash
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
 
-### Create Postgres user with test permissions
+---
+
+### 6.2 Environment variables
+
+Create a `.env` file in the project root (do **not** commit this file):
+
+```env
+OPENAI_API_KEY=your_key_here
+DEBUG=True
+DB_NAME=lamar_db
+DB_USER=lamar_user
+DB_PASSWORD=lamar_password
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+---
+
+### 6.3 Postgres setup (for running the app)
+
+```bash
 psql -U postgres -c "CREATE USER lamar_user WITH PASSWORD 'lamar_password' CREATEDB;"
-
-### Create initial DB
 psql -U postgres -c "CREATE DATABASE lamar_db OWNER lamar_user;"
+```
 
-### Run migrations & testing
+---
+
+### 6.4 Migrations and runserver
+
+```bash
 python manage.py migrate
-python manage.py test  # Crucial: Verify integrity rules before use
 python manage.py runserver
+```
+
+Then open in your browser:
+
+[http://127.0.0.1:8000/intake/](http://127.0.0.1:8000/intake/)
+
+---
+
+### 6.5 Run tests
+
+```bash
+python manage.py test
+```
+
+> Note: The test suite automatically switches to an **in-memory SQLite** database when running `manage.py test`, so reviewers can run tests without configuring Postgres.
+
+---
+
 
 ## 7. Known Limitations & Future Scope (P1/P2)
 - Async Processing: In production, LLM calls should move to a background worker (Celery) to improve UI responsiveness.
 - Identity Resolution: Future iterations would move from strict MRN matching to fuzzy-matching for patient identities.
-- PDF Ingestion: P1 goal to add OCR and pre-parsing of clinical notes before LLM submission.##
+- PDF Ingestion: P1 goal to add OCR and pre-parsing of clinical notes before LLM submission.

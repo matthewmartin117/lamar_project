@@ -1,19 +1,17 @@
 import os
+import logging
 from openai import OpenAI
 from django.conf import settings
 
-def generate_care_plan_from_llm(patient_records_text: str, medication_name: str):
-    """
-    Generate a pharmacist care plan from clinical text using an LLM.
+logger = logging.getLogger(__name__)
 
-    Returns:
-        (care_plan_text, error_message)
-    """
-    # Initialize INSIDE the function so it doesn't crash on startup
+def generate_care_plan_from_llm(patient_records_text: str, medication_name: str):
+    # 1. Initialize inside to prevent startup crashes
     api_key = getattr(settings, "OPENAI_API_KEY", None)
     if not api_key:
         return None, "API Key missing. Please check system configuration."
 
+    # PRESERVED: Your high-detail clinical prompts
     system_prompt = (
         "You are a Senior Clinical Pharmacist at a specialty pharmacy. "
         "Your task is to transform unstructured clinical notes into a structured Pharmacist Care Plan. "
@@ -31,7 +29,6 @@ def generate_care_plan_from_llm(patient_records_text: str, medication_name: str)
 
     ### OUTPUT TEMPLATE REQUIREMENTS
     Produce exactly these sections:
-
     1. Problem List / Drug Therapy Problems (DTPs)
     2. SMART Goals (Primary, Safety, and Process goals)
     3. Pharmacist Interventions (Dosing, Premeds, Titration, Hydration, Interactions)
@@ -46,26 +43,26 @@ def generate_care_plan_from_llm(patient_records_text: str, medication_name: str)
 
     try:
         client = OpenAI(api_key=api_key)
-        response = client.responses.create(
+
+        # FIX: Changed 'responses.create' to 'chat.completions.create'
+        # FIX: Changed 'input' to 'messages'
+        # FIX: Changed 'max_output_tokens' to 'max_tokens'
+        response = client.chat.completions.create(
             model="gpt-4o",
-            input=[
+            messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            # protect against token overflow
-            max_output_tokens=800,
-            # for determinstic output
+            max_tokens=800,  # Standard param for Chat Completions
             temperature=0.2,
-            # make sure the model returns text and not JSON
             response_format={"type": "text"},
-            # makes sure repsonse is not lagging
-            timeout=20,
+            timeout=20, # Note: some older httpx versions handle this differently
         )
 
-        care_plan_text = response.output_text
+        # FIX: Access the text via choices[0].message.content
+        care_plan_text = response.choices[0].message.content
         return care_plan_text, None
 
     except Exception as e:
-        # P0: Fail gracefully without leaking server internals
-        print(f"LLM Error: {str(e)}")
-        return None, "The AI service failed to generate the care plan. The order has still been saved."
+        logger.error(f"LLM integration failed: {e}")
+        return None, "The AI service is currently unavailable. The order has been saved."
